@@ -1,0 +1,38 @@
+
+program: main.py
+method: bayes
+
+metric: 
+  name: test_data_ll
+  goal: minimize
+
+parameters:
+  model:
+    latent_size: 
+      min:16
+      max: 32
+
+    hidden_size: 32
+    width_size: 128
+    depth: 2
+
+  data:
+    dataset_size: 1024
+    batch_size: 128
+    trial_time : 20.0
+    t_stim: 2.0
+    t_wait: 3.0
+    t_go: 5.0
+    n_timepoints: 200
+    n_neurons: 64
+    control_size: 3
+    behavior_size: 3
+    input_noise_scale: 0.01
+    process_noise_scale: 0.0
+
+  train:
+    steps: 10000
+    lr: 0.0008
+    early_stopping: 10
+    kl_anneal_steps: 200
+    print_every: 50

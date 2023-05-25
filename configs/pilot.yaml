@@ -1,0 +1,27 @@
+model:
+  latent_size: 3
+  hidden_size: 64
+  width_size: 128
+  depth: 2
+
+data:
+  dataset_size: 2048
+  batch_size: 256
+  trial_time : 20.0
+  t_stim: 2.0
+  t_wait: 3.0
+  t_go: 5.0
+  n_timepoints: 100
+  latent_size: 3
+  n_neurons: 64
+  control_size: 3
+  behavior_size: 3
+  input_noise_scale: 0.01
+  process_noise_scale: 0.0
+
+train:
+  steps: 10000
+  lr: 0.0008
+  early_stopping: 10
+  kl_annealing_steps: 5000
+  print_every: 100
