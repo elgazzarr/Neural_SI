@@ -96,7 +96,7 @@ class SystemDE(eqx.Module):
 def train(model, dataloaders, ts, key):
     train_dataloader, val_dataloader = dataloaders
     # define the optimizer
-    optimizer = optax.adam(1e-3)
+    optimizer = optax.adam(3e-3)
     opt_state = optimizer.init(eqx.filter(model, eqx.is_array_like))
     # define the loss function
     best_loss = jnp.inf
@@ -124,13 +124,13 @@ def train(model, dataloaders, ts, key):
 
     # training loop
     #print('Starting training of GT System')
-    for step in range(551):
+    for step in range(1001):
         # sample a batch of observations
         controls, outputs = train_dataloader.sample_observations(step)
         #Make a step 
         loss, acc, model, opt_state = make_step(model, controls, outputs, opt_state)
 
-        if step % 50 == 0:
+        if step % 100 == 0:
             val_controls, val_outputs = val_dataloader.sample_observations(0)
             val_loss, val_acc = loss_acc(model, val_controls, val_outputs)
             print(f'Step: {step}, Train Loss: {loss:.2f}, Train Accuracy: {acc:.2f} || Val Loss: {val_loss:.2f}, Val Accuracy: {val_acc:.2f}')

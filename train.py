@@ -24,6 +24,10 @@ from utils import *
 from models import *
 import wandb
 
+def clip_gradients(gradients, c):
+    # Clips the gradients of the whole model to the range of [-c,c]
+    get_leaves = lambda g: jax.tree_util.tree_leaves(g)
+    return eqx.tree_at(get_leaves, gradients, replace_fn=lambda x: jnp.clip(x, -c, c))
 
 
 
@@ -34,10 +38,22 @@ def train(dataloaders, model, config, key, args, save_path):
     train_dataloader, val_dataloader = dataloaders
 
     steps = config['train']['steps']
-    optim = optax.adam(config['train']['lr'])
+    scheduler = optax.warmup_exponential_decay_schedule(
+        init_value=1e-4,
+        peak_value=3e-3,
+        warmup_steps=50,
+        transition_steps=2000,
+        decay_rate=0.98,
+        transition_begin=0,
+        staircase=False,
+        end_value=1e-5)
+    optim = optax.adam(scheduler)
+    optim = optax.chain(optax.clip_by_global_norm(1.0), optim)
     opt_state = optim.init(eqx.filter(model, eqx.is_inexact_array))
 
     val_controls, val_spikes, val_rates, val_behaviour = val_dataloader.sample_observations(0)
+    plot_spikes_rates(val_rates, val_spikes, ts, save_path)
+    
     best_val_loss = jnp.inf
     best_model = None
     es_counter = 0
@@ -56,7 +72,7 @@ def train(dataloaders, model, config, key, args, save_path):
         jax.debug.print('ce: {}', behaviour_ce)
         #wandb.log({'pll': poisson_log_likelhood, 'ce': behaviour_ce})
     
-        loss = 0.7*poisson_log_likelhood + 0.3*behaviour_ce
+        loss = 0.8*poisson_log_likelhood + 0.2*behaviour_ce
         return loss
 
 
@@ -72,7 +88,7 @@ def train(dataloaders, model, config, key, args, save_path):
         jax.debug.print('ce: {}', behaviour_ce)
         jax.debug.print('kl_process: {}', kl_process)
         #wandb.log({'pll': poisson_log_likelhood, 'ce': behaviour_ce, 'kl_process': kl_process})
-        loss = poisson_log_likelhood + 0.3*behaviour_ce +  l*kl_process 
+        loss = poisson_log_likelhood + 0.25*behaviour_ce +  0.5*l*kl_process 
 
         return loss
 
@@ -87,7 +103,7 @@ def train(dataloaders, model, config, key, args, save_path):
         
         return value, model, opt_state
 
-    vis_samples = 20 if args.DE_type == 'SDE' else 1 
+    vis_samples = 10 if args.DE_type == 'SDE' else 1 
     vis_keys = jrandom.split(keys[0], vis_samples) 
     start = time.time()
     #Sample control
@@ -126,7 +142,7 @@ def train(dataloaders, model, config, key, args, save_path):
                     print('Early stopping at step {}'.format(e))
                     break
             fig, axes = plt.subplots(nrows=10, ncols=1, figsize=(16, 16), sharex=True)
-            visualize_rates(axes, pred_val_rates_mean, val_rates)
+            visualize_rates_ci(axes, pred_val_rates, val_rates)
             plt.savefig(save_path + f'{e}.png')
             start = time.time()
 

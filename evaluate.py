@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import jax
 import jax.random as jrandom
 from metrics import poisson_nll
-from utils import Rates_to_Obv
 import optax
 import equinox as eqx
 from copy import deepcopy
@@ -29,9 +28,7 @@ def eval(model, data_loader, config, key):
     return poisson_log_likelhood, acc
 
 
-def eval_behaviour(model, data_loaders, config, key):
-
-    """Evaluate the R2 of rates for predicting behaviour using by training a linear layer to predict behaviour from rates"""
+"""def eval_behaviour(model, data_loaders, config, key):
 
     ts = jnp.linspace(0, config['data']['trial_time'], config['data']['n_timepoints'])
     classifier = Rates_to_Obv(M=config['data']['n_neurons'], O=config['data']['behavior_size'], key=key)
@@ -93,4 +90,4 @@ def eval_behaviour(model, data_loaders, config, key):
             
     _, test_acc = loss_acc(best_clf, test_rates, test_behaviour)
 
-    return test_acc
+    return test_acc"""

@@ -18,8 +18,10 @@ def generate_observation(model, ts, t_stim, phases, frequencies, init, key):
                             t0=ts[0], t1=ts[-1], y0=y0, dt0=(ts[1] - ts[0])/2,
                             saveat=dfx.SaveAt(ts=ts)).ys
 
-    rates, spikes, preds = model(ts, control_signal, key)
-
+    rates, _, preds = model(ts, control_signal, key)
+    #Spikes key is always the same, so we can use the same key for all trials and dataloaders
+    spikes_key = jrandom.PRNGKey(0)
+    spikes = jrandom.poisson(spikes_key, lam=rates)
 
 
     return  control_signal, rates, spikes, preds
@@ -40,11 +42,11 @@ class Dataloader():
         self.batch_size = batch_size
         keys = jrandom.split(key,5)
         data_keys = jrandom.split(keys[4], dataset_size)
-        self.freqs = jrandom.uniform(keys[0], shape=(self.dataset_size, C), minval=0.8, maxval=1.5)
-        self.phases = jrandom.uniform(keys[1], shape=(self.dataset_size, C), minval=0, maxval=2*jnp.pi)
+        self.freqs = jrandom.uniform(keys[0], shape=(self.dataset_size, C), minval=0.5, maxval=2)
+        self.phases = jrandom.uniform(keys[1], shape=(self.dataset_size, C))
         self.t_stim = jrandom.uniform(keys[2], shape=(self.dataset_size,), minval=t_stim, maxval=t_stim)
         self.t_go = self.t_stim + t_wait
-        init =  jrandom.uniform(keys[3], shape=(self.dataset_size, C))
+        init =  jrandom.normal(keys[3], shape=(self.dataset_size, C))
         self.controls, self.rates, self.spikes, self.outputs = jax.vmap(generate_observation, in_axes=(None, None,0,0,0,0,0))(model, ts, self.t_stim,
                                                                                 self.phases, self.freqs, init, data_keys)
         # calculate argmax of the output signal and one hot encode it

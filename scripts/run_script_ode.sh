@@ -7,7 +7,7 @@ source ~/.bashrc
 # Change directory to the desired location
 cd code/NDEs_sim
 
-export exp_name='ODES_behaviour'
+export exp_name='ODES_behaviour2'
 
 
 # Run the Python script with the specified argument

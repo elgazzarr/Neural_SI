@@ -11,6 +11,7 @@ from jax import Array
 from diffrax.custom_types import PyTree, Scalar, Union
 import seaborn as sns
 import pandas as pd
+import matplotlib.pyplot as plt
 
 class Vectorfield_encoder(eqx.Module):
     mlp: eqx.nn.MLP
@@ -176,7 +177,7 @@ class Vectorfield_mlp_prior(eqx.Module):
         return self.net(jnp.concatenate([y, args.evaluate(t)], axis=-1))
 
 
-class Diffusion(eqx.Module):
+class Diffusion_diag(eqx.Module):
 
     nets: List[eqx.nn.MLP]
 
@@ -202,24 +203,16 @@ class Diffusion(eqx.Module):
         return jnp.concatenate(out, axis=0)
 
 
-class Diffusion_mlp(eqx.Module):
+class Diffusion(eqx.Module):
 
-    net: eqx.nn.MLP
+    W: jnp.ndarray
 
-    def __init__(self, latent_size, *, key):
+    def __init__(self, latent_size, key):
 
-        self.net = eqx.nn.MLP(
-            in_size=latent_size,
-            width_size=32,
-            out_size=latent_size,
-            depth=1,
-            activation=jax.nn.tanh,
-            final_activation=jax.nn.sigmoid,
-            key=key,
-        )
+     self.W = jrandom.uniform(key=key, shape=(latent_size, latent_size))
 
     def __call__(self, t, y, args):
-        return self.net(y)
+        return self.W
 
 
 
@@ -244,22 +237,6 @@ class Readout(eqx.Module):
 
 
 
-class Rates_to_Obv(eqx.Module):
-    rates_to_obv: eqx.nn.Linear
-
-    def __init__(self, M, O, key):
-        super().__init__()
-        self.rates_to_obv = eqx.nn.Linear(M, O, key=key)
-    
-    def __call__(self, rates):
-        obs = jax.vmap(self.rates_to_obv)(rates)
-        return obs
-
-
-
-
-
-
 
 def visualize_rates(ax, preds, gt):
 
@@ -280,8 +257,8 @@ def visualize_rates(ax, preds, gt):
         # plot true rates
         ax[i].plot(true_rates, label=f"Neuron {i+1} (GT)", linestyle='--', c= 'r', linewidth=2)
         ax[i].set_ylabel("Firing rate (Hz)")
-        ax[i].legend(loc="upper right")
-        #ax[i].set_ylim([-0.1, 1.1])
+        #ax[i].legend(loc="upper right")
+        ax[i].set_ylim([-0.1, 1.7])
 
 from scipy import stats
 
@@ -293,15 +270,15 @@ def visualize_rates_ci(ax, preds, gt):
     T = preds.shape[2]
     preds = preds[:,0,:,:] # gen_samples x time  x area_neurons
     # preds_mean 
-    preds_mean = jnp.mean(preds, axis=0)
+    preds_mean = np.mean(preds, axis=0)
     # preds_sd
-    preds_sd = jnp.std(preds, axis=0)
+    preds_sd = np.std(preds, axis=0)
     gt = gt[0] #time  x area_neurons
 
     # get 10 neurons for plotting
-    preds_10_mean =  jnp.expand_dims(np.moveaxis(preds_mean,-1,0)[:10],-1)
-    preds_10_sd =  jnp.expand_dims(np.moveaxis(preds_sd,-1,0)[:10],-1)
-    gt_10 = jnp.expand_dims(np.moveaxis(gt, -1, 0)[:10],-1)
+    preds_10_mean =  np.expand_dims(np.moveaxis(preds_mean,-1,0)[:10],-1)
+    preds_10_sd =  np.expand_dims(np.moveaxis(preds_sd,-1,0)[:10],-1)
+    gt_10 = np.expand_dims(np.moveaxis(gt, -1, 0)[:10],-1)
 
 
     for i, (infered_rates_m, infered_rates_sd, true_rates) in enumerate(zip(preds_10_mean, preds_10_sd, gt_10)):
@@ -309,7 +286,7 @@ def visualize_rates_ci(ax, preds, gt):
         ax[i].plot(infered_rates_m, label=f"Neuron {i+1}", c='g', linewidth=2)
         # plot true rates
         ax[i].plot(true_rates, label=f"Neuron {i+1} (GT)", linestyle='--', c= 'r', linewidth=2)
-        conf_interval = jnp.zeros((T, 2))
+        conf_interval = np.zeros((T, 2))
         for t in range(T):
             #percent_interval[t, :] = np.percentile(matrix[:, t], [2.5, 97.5])
             conf_interval[t, :] = stats.t.interval(0.95, N-1, loc=infered_rates_m[t], scale=infered_rates_sd[t]/np.sqrt(N))
@@ -317,3 +294,35 @@ def visualize_rates_ci(ax, preds, gt):
         
         ax[i].fill_between(range(T), conf_interval[:,0], conf_interval[:,1], alpha=0.2)
         #ax[i].set_ylim([-0.5, 1.2])
+
+def plot_spikes_rates(rates, spikes, ts, save_path):
+    rates = rates[0]
+    spikes = spikes[0]
+
+    # Plot the rates and the spikes in two adjacent subplots
+    fig, ax = plt.subplots(10,2, figsize=(12,16))
+    # Add a big title at the top
+    ax[0][0].set_title('Firing rates', fontsize=18)
+    ax[0][1].set_title('Spike Count' , fontsize=18)
+    # Add vertical space between the title and the subplots
+    for neuron in range(10):
+        ax[neuron][0].plot(ts, rates[:,neuron], label=f'Neuron {neuron}', color='red', linewidth=1.5)
+        ax[neuron][1].plot(ts, spikes[:,neuron], label=f'Neuron {neuron}', color='blue', linewidth=2.0)
+        #ax[neuron][0].legend()
+        #ax[neuron][1].legend()
+        # set limits  
+        ax[neuron][0].set_ylim([0, 1.5])
+        ax[neuron][1].set_ylim([0,4.5])
+        
+        # set ticks to none
+        ax[neuron][0].set_xticks([])
+        ax[neuron][0].set_yticks([])
+        ax[neuron][1].set_xticks([])
+        ax[neuron][1].set_yticks([])
+        # set x label to be Neuron i 
+        ax[neuron][0].set_ylabel(f'Neuron {neuron+1}', fontsize=12)
+
+    plt.tight_layout()
+    # transparent background
+
+    plt.savefig(save_path+'rates_spikes.png', transparent=True)

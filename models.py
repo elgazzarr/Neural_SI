@@ -9,7 +9,7 @@ from jax import jit
 import numpy as np 
 from jax import Array
 from diffrax.custom_types import PyTree, Scalar, Union
-from utils import Encoder, Vectorfield_mlp, Readout, Vectorfield_mlp_posterior, Diffusion, Vectorfield_mlp_prior
+from utils import Encoder, Vectorfield_mlp, Readout, Vectorfield_mlp_posterior, Diffusion, Diffusion_diag, Vectorfield_mlp_prior
 from sde_kl import sde_kl_divergence
 
 class AbstractDE(eqx.Module):
@@ -87,7 +87,7 @@ class LatentODE(AbstractDE):
         if u is not None:
             u = dfx.LinearInterpolation(ts=ts, ys=u)
         system = dfx.ODETerm(self.drift_vf)
-        solver = dfx.Tsit5()
+        solver = dfx.Euler()
         t = len(ts)//5
         ts = ts.reshape(5, t)
         dt = (ts[0,1] - ts[0,0]) * 0.5
@@ -98,16 +98,16 @@ class LatentODE(AbstractDE):
 
         def truncated_solve(y0, t):
             ta , tb, ts = t
-            dt0 = ts[1] - ts[0]
+            dt0 = (ts[1] - ts[0]) * 0.5
             sol = dfx.diffeqsolve(
                 system,
                 solver,
                 ta,
                 tb,
-                dt0=dt0/2,
+                dt0=dt0,
                 y0=y0,
                 saveat=dfx.SaveAt(ts=ts),
-                stepsize_controller=dfx.PIDController(rtol=1e-3, atol=1e-6),
+                #stepsize_controller=dfx.PIDController(rtol=1e-3, atol=1e-6),
                 args=u
                 )
             ys = sol.ys
@@ -142,7 +142,7 @@ class LatentSDE(AbstractDE):
                                                             config['model']['depth'], 
                                                              key=self.key)
 
-        self.diffusion =  Diffusion(config['model']['latent_size'], key=self.key)
+        self.diffusion =  Diffusion_diag(config['model']['latent_size'], key=self.key)
 
 
 
@@ -151,10 +151,10 @@ class LatentSDE(AbstractDE):
             u = dfx.LinearInterpolation(ts=ts, ys=u)
         context = dfx.LinearInterpolation(ts=ts, ys=context)
 
-        solver = dfx.ReversibleHeun()
+        solver = dfx.Euler()
         t = len(ts)//5
         ts = ts.reshape(5, t)
-        dt = (ts[0,1] - ts[0,0]) * 0.5
+        dt = (ts[0,1] - ts[0,0])
         intervals =  jnp.append(ts[0,0],ts[:,-1] + dt)
         interval_begins = intervals[:-1]
         interval_endings = intervals[1:]
@@ -178,14 +178,14 @@ class LatentSDE(AbstractDE):
         def truncated_solve(carry, t):
             y0 = carry
             ta , tb, ts = t
-            dt0 = (ts[1] - ts[0])
+            dt0 = (ts[1] - ts[0]) * 0.5
             sol = dfx.diffeqsolve(aug_sde,
                                 t0=ta,
                                 t1=tb,
                                 y0=y0,
                                 dt0=dt0,
                                 solver=solver,
-                                stepsize_controller=dfx.PIDController(rtol=1e-3, atol=1e-6),
+                                #stepsize_controller=dfx.PIDController(rtol=1e-3, atol=1e-6),
                                 saveat=dfx.SaveAt(ts=ts),
                                 args=[context, u])
             
